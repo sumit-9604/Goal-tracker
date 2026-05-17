@@ -20,13 +20,6 @@ app.use(
 app.use(express.json());
 
 
-app.use(
-  cors({
-    origin: "https://goal-tracker-frontend-agph.onrender.com",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
-  })
-);
 app.get("/", (req, res) => {
   res.send("Backend Running");
 });
