@@ -20,14 +20,22 @@ function App() {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
 
-    if (token && storedUser) {
+    // Remove invalid stored user (e.g., "undefined" string or malformed JSON)
+    if (storedUser === 'undefined' || storedUser === 'null') {
+      localStorage.removeItem('user');
+    }
+
+    if (token && storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        if (parsedUser && typeof parsedUser === 'object') {
+          setUser(parsedUser);
+          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        } else {
+          throw new Error('Invalid user object');
+        }
       } catch (error) {
         console.error('Failed to parse user from localStorage:', error);
-        // Clear invalid data
         localStorage.removeItem('user');
         localStorage.removeItem('token');
       }
@@ -36,6 +44,11 @@ function App() {
   }, []);
 
   const login = (userData, token) => {
+    // Ensure userData is a valid object
+    if (!userData || typeof userData !== 'object') {
+      console.error('Invalid user data provided to login:', userData);
+      return;
+    }
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;

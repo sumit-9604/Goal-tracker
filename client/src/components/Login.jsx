@@ -11,16 +11,16 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await api.post('/auth/login', { email, password });
-      login(res.data.user, res.data.token);
-      toast.success('Login successful');
-      navigate('/dashboard');
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Login failed');
-    }
-  };
+  e.preventDefault();
+  try {
+    const res = await api.post('/auth/login', { email, password });
+    login(res.data.user, res.data.token);  // ❗ res.data.user must exist
+    toast.success('Login successful');
+    navigate('/dashboard');
+  } catch (err) {
+    toast.error(err.response?.data?.error || 'Login failed');
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 flex items-center justify-center p-4">
