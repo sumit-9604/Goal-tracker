@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://goal-tracker-nlag.onrender.com/api",
+  baseURL: "https://goal-tracker-o8qg.onrender.com/api",
   headers: {
     "Content-Type": "application/json",
   },
