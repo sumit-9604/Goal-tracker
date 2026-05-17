@@ -11,7 +11,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://goal-tracker-1-qgty.onrender.com",
+      "https://goal-tracker-frontend-agph.onrender.com",
       "http://localhost:5173",
     ],
     credentials: true,
