@@ -194,8 +194,6 @@ const CheckIns = () => {
                   <p>{latestFeedback.manager_feedback}</p>
                 </div>
               )}
-
-              {/* EMPLOYEE */}
               {/* EMPLOYEE */}
               {user.role === "employee" && (
                 <div className="border-t pt-4">
