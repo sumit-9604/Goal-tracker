@@ -135,16 +135,37 @@ app.get(
       const result = await db.query(
         `
         SELECT 
-          g.*, 
-          u.full_name as employee_name,
-          gp.progress_percent,
-          gp.manager_feedback
+          g.*,
+          u.full_name AS employee_name,
+
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', gp.id,
+                'quarter', gp.quarter,
+                'achievement', gp.achievement,
+                'status', gp.status,
+                'progress_percent', gp.progress_percent,
+                'manager_feedback', gp.manager_feedback,
+                'created_at', gp.created_at
+              )
+              ORDER BY gp.created_at DESC
+            ) FILTER (WHERE gp.id IS NOT NULL),
+            '[]'
+          ) AS checkins
+
         FROM goals g
-        JOIN users u 
+
+        JOIN users u
           ON g.employee_id = u.id
+
         LEFT JOIN goal_progress gp
           ON gp.goal_id = g.id
+
         WHERE g.employee_id = $1
+
+        GROUP BY g.id, u.full_name
+
         ORDER BY g.created_at DESC
         `,
         [req.user.id]
@@ -583,42 +604,49 @@ app.get(
   authorize("manager", "admin"),
   async (req, res) => {
     try {
-      let result;
+      let query = `
+        SELECT 
+          g.*,
+          u.full_name AS employee_name,
+
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', gp.id,
+                'quarter', gp.quarter,
+                'achievement', gp.achievement,
+                'status', gp.status,
+                'progress_percent', gp.progress_percent,
+                'manager_feedback', gp.manager_feedback,
+                'created_at', gp.created_at
+              )
+              ORDER BY gp.created_at DESC
+            ) FILTER (WHERE gp.id IS NOT NULL),
+            '[]'
+          ) AS checkins
+
+        FROM goals g
+
+        JOIN users u
+          ON g.employee_id = u.id
+
+        LEFT JOIN goal_progress gp
+          ON gp.goal_id = g.id
+      `;
+
+      const params = [];
 
       if (req.user.role === "manager") {
-        result = await db.query(
-          `
-          SELECT
-            g.*,
-            u.full_name AS employee_name,
-            gp.progress_percent,
-            gp.manager_feedback
-          FROM goals g
-          JOIN users u
-            ON g.employee_id = u.id
-          LEFT JOIN goal_progress gp
-            ON gp.goal_id = g.id
-          WHERE u.manager_id = $1
-          ORDER BY g.created_at DESC
-          `,
-          [req.user.id]
-        );
-      } else {
-        // admin sees all
-        result = await db.query(`
-          SELECT
-            g.*,
-            u.full_name AS employee_name,
-            gp.progress_percent,
-            gp.manager_feedback
-          FROM goals g
-          JOIN users u
-            ON g.employee_id = u.id
-          LEFT JOIN goal_progress gp
-            ON gp.goal_id = g.id
-          ORDER BY g.created_at DESC
-        `);
+        query += ` WHERE u.manager_id = $1 `;
+        params.push(req.user.id);
       }
+
+      query += `
+        GROUP BY g.id, u.full_name
+        ORDER BY g.created_at DESC
+      `;
+
+      const result = await db.query(query, params);
 
       res.json(result.rows);
     } catch (err) {
@@ -754,38 +782,37 @@ app.post(
   async (req, res) => {
     try {
       const { goalId } = req.params;
-      const { feedback,quarter } = req.body;
+      const { feedback, quarter } = req.body;
 
-      // Check progress record exists
-      const existing = await db.query(
-  `SELECT * FROM goal_progress
-   WHERE goal_id = $1 AND quarter = $2`,
-  [goalId, quarter]
-);
-
-if (existing.rows.length) {
-  await db.query(
-    `UPDATE goal_progress
-     SET manager_feedback = $1
-     WHERE goal_id = $2 AND quarter = $3`,
-    [feedback, goalId, quarter]
-  );
-} else {
-  await db.query(
-    `INSERT INTO goal_progress
-     (goal_id, quarter, manager_feedback)
-     VALUES ($1,$2,$3)`,
-    [goalId, quarter, feedback]
-  );
-}
+      await db.query(
+        `
+        INSERT INTO goal_progress
+        (
+          goal_id,
+          quarter,
+          manager_feedback,
+          created_by
+        )
+        VALUES ($1,$2,$3,$4)
+        `,
+        [
+          goalId,
+          quarter,
+          feedback,
+          req.user.id,
+        ]
+      );
 
       res.json({ success: true });
+
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  },
+  }
 );
+
+
 
 // GET progress for goals
 app.get("/api/progress", authenticate, async (req, res) => {
@@ -857,67 +884,100 @@ app.post(
       const { quarter, achievement, status } = req.body;
 
       const goalRes = await db.query(
-        `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'approved'`,
-        [goalId, req.user.id],
+        `
+        SELECT * FROM goals
+        WHERE id = $1
+        AND employee_id = $2
+        AND status = 'approved'
+        `,
+        [goalId, req.user.id]
       );
 
       if (!goalRes.rows.length) {
-        return res
-          .status(403)
-          .json({ error: "Goal not found or not approved" });
+        return res.status(403).json({
+          error: "Goal not found or not approved",
+        });
       }
 
       const goal = goalRes.rows[0];
+
       const target = parseFloat(goal.target_value);
       const actual = parseFloat(achievement);
+
       let progressPercent = 0;
 
-      // ← UoM-based formula
       switch (goal.uom_type) {
-        case "numeric": // Min — higher is better
+        case "numeric":
         case "percentage":
           progressPercent =
-            target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+            target > 0
+              ? Math.min((actual / target) * 100, 100)
+              : 0;
           break;
-        case "timeline": // Max — lower is better (e.g. TAT)
+
+        case "timeline":
           progressPercent =
-            actual > 0 ? Math.min((target / actual) * 100, 100) : 0;
+            actual > 0
+              ? Math.min((target / actual) * 100, 100)
+              : 0;
           break;
-        case "zero": // Zero = success
+
+        case "zero":
           progressPercent = actual === 0 ? 100 : 0;
           break;
+
         default:
           progressPercent =
-            target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+            target > 0
+              ? Math.min((actual / target) * 100, 100)
+              : 0;
       }
 
       progressPercent = parseFloat(progressPercent.toFixed(2));
 
-      // Save actual_value on goal
       await db.query(
-        `UPDATE goals SET actual_value = $1, updated_at = NOW() WHERE id = $2`,
-        [actual, goalId],
+        `
+        UPDATE goals
+        SET actual_value = $1,
+            updated_at = NOW()
+        WHERE id = $2
+        `,
+        [actual, goalId]
       );
 
-      // Upsert goal_progress
-      const existing = await db.query(
-  `INSERT INTO goal_progress
-   (goal_id, quarter, achievement, status, progress_percent)
-   VALUES ($1,$2,$3,$4,$5)`,
-  [
-    goalId,
-    quarter,
-    actual,
-    status,
-    progressPercent,
-  ]
-);
-      res.json({ success: true, progress_percent: progressPercent });
+      await db.query(
+        `
+        INSERT INTO goal_progress
+        (
+          goal_id,
+          quarter,
+          achievement,
+          status,
+          progress_percent,
+          created_by
+        )
+        VALUES ($1,$2,$3,$4,$5,$6)
+        `,
+        [
+          goalId,
+          quarter,
+          actual,
+          status,
+          progressPercent,
+          req.user.id,
+        ]
+      );
+
+      res.json({
+        success: true,
+        progress_percent: progressPercent,
+      });
+
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  },
+  }
 );
 // ADMIN/MANAGER: Push shared goal to multiple employees
 app.post(
