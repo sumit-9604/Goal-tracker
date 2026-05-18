@@ -1,7 +1,10 @@
 import axios from "axios";
+console.log("API URL:", import.meta.env.VITE_API_URL);
+const BASE_URL =
+  import.meta.env.VITE_API_URL || "https://goal-tracker-qc65.onrender.com";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL + "/api",
+  baseURL: BASE_URL + "/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -17,7 +20,7 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 api.interceptors.response.use(
@@ -32,7 +35,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

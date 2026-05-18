@@ -1,26 +1,29 @@
-import React, { useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
-import api from './api';
-import { AuthContext } from '../App';
+import React, { useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import api from "./api";
+import { AuthContext } from "../App";
 
 const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  try {
-    const res = await api.post('/auth/login', { email, password });
-    login(res.data.user, res.data.token);  // ❗ res.data.user must exist
-    toast.success('Login successful');
-    navigate('/dashboard');
-  } catch (err) {
-    toast.error(err.response?.data?.error || 'Login failed');
-  }
-};
+    e.preventDefault();
+    try {
+      console.log("Attempting login to:", api.defaults.baseURL);
+      const res = await api.post("/auth/login", { email, password });
+      console.log("Login response:", res.data);
+      login(res.data.user, res.data.token);
+      toast.success("Login successful");
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Login error:", err);
+      toast.error(err.response?.data?.error || "Login failed");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 flex items-center justify-center p-4">
@@ -36,7 +39,9 @@ const Login = () => {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
             <input
               type="email"
               placeholder="you@example.com"
@@ -47,7 +52,9 @@ const Login = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
             <input
               type="password"
               placeholder="••••••••"
