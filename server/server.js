@@ -707,7 +707,113 @@ app.get(
     }
   }
 );
+// ================= CHECK-INS / PROGRESS =================
 
+// EMPLOYEE: Save progress
+app.post("/api/progress/:goalId", authenticate, authorize("employee"), async (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { quarter, achievement, status } = req.body;
+
+    // Verify goal belongs to employee and is approved
+    const goalRes = await db.query(
+      `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'approved'`,
+      [goalId, req.user.id]
+    );
+
+    if (!goalRes.rows.length) {
+      return res.status(403).json({ error: "Goal not found or not approved" });
+    }
+
+    const goal = goalRes.rows[0];
+
+    // Calculate progress percent
+    const progressPercent = goal.target_value > 0
+      ? Math.min((parseFloat(achievement) / parseFloat(goal.target_value)) * 100, 100).toFixed(2)
+      : 0;
+
+    // Upsert progress record
+    const existing = await db.query(
+      `SELECT * FROM goal_progress WHERE goal_id = $1`,
+      [goalId]
+    );
+
+    if (existing.rows.length) {
+      await db.query(
+        `UPDATE goal_progress 
+         SET progress_percent = $1, created_at = NOW()
+         WHERE goal_id = $2`,
+        [progressPercent, goalId]
+      );
+    } else {
+      await db.query(
+        `INSERT INTO goal_progress (goal_id, progress_percent)
+         VALUES ($1, $2)`,
+        [goalId, progressPercent]
+      );
+    }
+
+    // Save actual_value back to goal
+    await db.query(
+      `UPDATE goals SET updated_at = NOW() WHERE id = $1`,
+      [goalId]
+    );
+
+    res.json({ success: true, progress_percent: progressPercent });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// MANAGER: Save feedback
+app.post("/api/progress/:goalId/feedback", authenticate, authorize("manager", "admin"), async (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { feedback } = req.body;
+
+    // Check progress record exists
+    const existing = await db.query(
+      `SELECT * FROM goal_progress WHERE goal_id = $1`,
+      [goalId]
+    );
+
+    if (existing.rows.length) {
+      await db.query(
+        `UPDATE goal_progress SET manager_feedback = $1 WHERE goal_id = $2`,
+        [feedback, goalId]
+      );
+    } else {
+      await db.query(
+        `INSERT INTO goal_progress (goal_id, progress_percent, manager_feedback)
+         VALUES ($1, 0, $2)`,
+        [goalId, feedback]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET progress for goals
+app.get("/api/progress", authenticate, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT gp.*, g.title, g.target_value
+       FROM goal_progress gp
+       JOIN goals g ON gp.goal_id = g.id
+       WHERE g.employee_id = $1`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // ================= ERROR HANDLER =================
 
 app.use((err, req, res, next) => {
