@@ -18,15 +18,12 @@ const CheckIns = () => {
 
   const loadGoals = async () => {
     try {
-      const endpoint =
-        user.role === "employee"
-          ? "/goals/my"
-          : "/goals/team";
+      const endpoint = user.role === "employee" ? "/goals/my" : "/goals/team";
 
       const res = await api.get(endpoint);
 
       const active = res.data.filter(
-        (g) => g.status === "approved" || g.status === "locked"
+        (g) => g.status === "approved" || g.status === "locked",
       );
 
       setGoals(active);
@@ -50,9 +47,7 @@ const CheckIns = () => {
   const getProgressPercent = (goal, achievement) => {
     const target = parseFloat(goal.target_value);
 
-    const actual = parseFloat(
-      achievement ?? goal.actual_value
-    );
+    const actual = parseFloat(achievement ?? goal.actual_value);
 
     if (isNaN(actual) || isNaN(target)) return null;
 
@@ -94,9 +89,7 @@ const CheckIns = () => {
       loadGoals();
     } catch (err) {
       console.error(err);
-      toast.error(
-        err.response?.data?.error || "Update failed"
-      );
+      toast.error(err.response?.data?.error || "Update failed");
     }
   };
 
@@ -124,83 +117,60 @@ const CheckIns = () => {
       loadGoals();
     } catch (err) {
       console.error(err);
-      toast.error(
-        err.response?.data?.error || "Failed to save feedback"
-      );
+      toast.error(err.response?.data?.error || "Failed to save feedback");
     }
   };
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">
-        Quarterly Check-ins
-      </h1>
+      <h1 className="text-3xl font-bold mb-6">Quarterly Check-ins</h1>
 
       <div className="space-y-6">
         {goals.map((goal) => {
           const livePercent = getProgressPercent(
             goal,
-            progressInputs[goal.id]?.achievement
+            progressInputs[goal.id]?.achievement,
           );
 
-          const latestFeedback =
-            goal.checkins
-              ?.filter((c) => c.manager_feedback)
-              ?.sort(
-                (a, b) =>
-                  new Date(b.created_at) -
-                  new Date(a.created_at)
-              )?.[0];
+          const latestFeedback = goal.checkins
+            ?.filter((c) => c.manager_feedback)
+            ?.sort(
+              (a, b) => new Date(b.created_at) - new Date(a.created_at),
+            )?.[0];
 
           return (
-            <div
-              key={goal.id}
-              className="card p-5 border rounded-xl"
-            >
-              {goal.employee_name &&
-                user.role !== "employee" && (
-                  <p className="text-sm text-blue-600 mb-1">
-                    {goal.employee_name}
-                  </p>
-                )}
+            <div key={goal.id} className="card p-5 border rounded-xl">
+              {goal.employee_name && user.role !== "employee" && (
+                <p className="text-sm text-blue-600 mb-1">
+                  {goal.employee_name}
+                </p>
+              )}
 
-              <h3 className="font-bold text-lg">
-                {goal.title}
-              </h3>
+              <h3 className="font-bold text-lg">{goal.title}</h3>
 
-              <p className="text-gray-600 text-sm mb-4">
-                {goal.description}
-              </p>
+              <p className="text-gray-600 text-sm mb-4">{goal.description}</p>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="bg-blue-50 p-3 rounded">
                   <p className="text-xs">Target</p>
-                  <p className="font-bold">
-                    {goal.target_value}
-                  </p>
+                  <p className="font-bold">{goal.target_value}</p>
                 </div>
 
                 <div className="bg-green-50 p-3 rounded">
                   <p className="text-xs">Achievement</p>
-                  <p className="font-bold">
-                    {goal.actual_value ?? "—"}
-                  </p>
+                  <p className="font-bold">{goal.actual_value ?? "—"}</p>
                 </div>
 
                 <div className="bg-purple-50 p-3 rounded">
                   <p className="text-xs">Progress</p>
                   <p className="font-bold">
-                    {livePercent != null
-                      ? `${livePercent}%`
-                      : "—"}
+                    {livePercent != null ? `${livePercent}%` : "—"}
                   </p>
                 </div>
 
                 <div className="bg-yellow-50 p-3 rounded">
                   <p className="text-xs">Weightage</p>
-                  <p className="font-bold">
-                    {goal.weightage}%
-                  </p>
+                  <p className="font-bold">{goal.weightage}%</p>
                 </div>
               </div>
 
@@ -210,10 +180,7 @@ const CheckIns = () => {
                     <div
                       className="bg-blue-500 h-2 rounded-full"
                       style={{
-                        width: `${Math.min(
-                          livePercent,
-                          100
-                        )}%`,
+                        width: `${Math.min(livePercent, 100)}%`,
                       }}
                     />
                   </div>
@@ -222,83 +189,98 @@ const CheckIns = () => {
 
               {latestFeedback && (
                 <div className="bg-yellow-50 border p-3 rounded mb-4">
-                  <p className="font-semibold">
-                    Latest Manager Feedback
-                  </p>
+                  <p className="font-semibold">Latest Manager Feedback</p>
 
-                  <p>
-                    {latestFeedback.manager_feedback}
-                  </p>
+                  <p>{latestFeedback.manager_feedback}</p>
                 </div>
               )}
 
               {/* EMPLOYEE */}
+              {/* EMPLOYEE */}
               {user.role === "employee" && (
                 <div className="border-t pt-4">
-                  <div className="flex flex-col md:flex-row gap-3">
-                    <input
-                      type="number"
-                      className="input flex-1"
-                      placeholder="Achievement"
-                      value={
-                        progressInputs[goal.id]
-                          ?.achievement ?? ""
-                      }
-                      onChange={(e) =>
-                        setProgressInputs((prev) => ({
-                          ...prev,
-                          [goal.id]: {
-                            ...prev[goal.id],
-                            achievement: e.target.value,
-                          },
-                        }))
-                      }
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                    {/* Achievement Input */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Achievement Value (Target: {goal.target_value})
+                      </label>
+                      <input
+                        type="number"
+                        className="input w-full"
+                        placeholder={`Enter value (0 - ${goal.target_value})`}
+                        value={progressInputs[goal.id]?.achievement ?? ""}
+                        onChange={(e) =>
+                          setProgressInputs((prev) => ({
+                            ...prev,
+                            [goal.id]: {
+                              ...prev[goal.id],
+                              achievement: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
 
-                    <select
-                      className="input"
-                      value={
-                        progressInputs[goal.id]
-                          ?.status ?? "on_track"
-                      }
-                      onChange={(e) =>
-                        setProgressInputs((prev) => ({
-                          ...prev,
-                          [goal.id]: {
-                            ...prev[goal.id],
-                            status: e.target.value,
-                          },
-                        }))
-                      }
-                    >
-                      <option value="not_started">
-                        Not Started
-                      </option>
+                    {/* Status Dropdown */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Status
+                      </label>
+                      <select
+                        className="input w-full"
+                        value={progressInputs[goal.id]?.status ?? "on_track"}
+                        onChange={(e) =>
+                          setProgressInputs((prev) => ({
+                            ...prev,
+                            [goal.id]: {
+                              ...prev[goal.id],
+                              status: e.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="not_started">Not Started</option>
+                        <option value="on_track">On Track</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
 
-                      <option value="on_track">
-                        On Track
-                      </option>
-
-                      <option value="completed">
-                        Completed
-                      </option>
-                    </select>
-
-                    <button
-                      onClick={() =>
-                        updateProgress(goal.id)
-                      }
-                      className="btn-primary"
-                    >
-                      Save
-                    </button>
+                    {/* Save Button */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1 invisible">
+                        Action
+                      </label>
+                      <button
+                        onClick={() => updateProgress(goal.id)}
+                        className="btn-primary w-full"
+                      >
+                        Save Progress
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Live Progress Preview */}
+                  {progressInputs[goal.id]?.achievement && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-xl">
+                      <p className="text-xs text-gray-600">
+                        Progress Preview:
+                        <span className="font-bold text-blue-700 ml-1">
+                          {getProgressPercent(
+                            goal,
+                            progressInputs[goal.id]?.achievement,
+                          )}
+                          %
+                        </span>{" "}
+                        of target
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* MANAGER */}
-              {(user.role === "manager" ||
-                user.role === "admin") && (
+              {(user.role === "manager" || user.role === "admin") && (
                 <div className="border-t pt-4">
                   <textarea
                     className="input w-full mb-2"
@@ -314,9 +296,7 @@ const CheckIns = () => {
                   />
 
                   <button
-                    onClick={() =>
-                      submitFeedback(goal.id)
-                    }
+                    onClick={() => submitFeedback(goal.id)}
                     className="btn-primary"
                   >
                     Send Feedback
