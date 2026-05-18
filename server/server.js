@@ -103,11 +103,9 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
 
     res.json({
       token,
@@ -127,6 +125,7 @@ app.post("/api/auth/login", async (req, res) => {
 // ================= GOALS =================
 
 // MY GOALS
+// MY GOALS
 app.get(
   "/api/goals/my",
   authenticate,
@@ -134,34 +133,23 @@ app.get(
   async (req, res) => {
     try {
       const result = await db.query(
-        `SELECT * FROM goals WHERE employee_id = $1 ORDER BY created_at DESC`,
-        [req.user.id]
-      );
-      res.json(result.rows);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
-
-// TEAM GOALS
-app.get(
-  "/api/goals/team",
-  authenticate,
-  authorize("manager", "admin"),
-  async (req, res) => {
-    try {
-      const result = await db.query(
         `
-        SELECT g.*, u.full_name as employee_name
+        SELECT 
+          g.*, 
+          u.full_name as employee_name,
+          gp.progress_percent,
+          gp.manager_feedback
         FROM goals g
-        JOIN users u ON g.employee_id = u.id
-        WHERE u.manager_id = $1 OR $2 = 'admin'
+        JOIN users u 
+          ON g.employee_id = u.id
+        LEFT JOIN goal_progress gp
+          ON gp.goal_id = g.id
+        WHERE g.employee_id = $1
         ORDER BY g.created_at DESC
         `,
-        [req.user.id, req.user.role]
+        [req.user.id]
       );
+
       res.json(result.rows);
     } catch (err) {
       console.error(err);
@@ -169,7 +157,6 @@ app.get(
     }
   }
 );
-
 // CREATE GOAL
 app.post(
   "/api/goals",
@@ -189,7 +176,7 @@ app.post(
 
       const countRes = await db.query(
         `SELECT COUNT(*) FROM goals WHERE employee_id = $1 AND status IN ('draft', 'pending')`,
-        [req.user.id]
+        [req.user.id],
       );
 
       if (parseInt(countRes.rows[0].count) >= 8) {
@@ -221,7 +208,7 @@ app.post(
           weightage,
           deadline,
           "draft",
-        ]
+        ],
       );
 
       res.json(result.rows[0]);
@@ -229,7 +216,7 @@ app.post(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // EDIT GOAL
@@ -252,7 +239,7 @@ app.put(
 
       const check = await db.query(
         `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'draft'`,
-        [id, req.user.id]
+        [id, req.user.id],
       );
 
       if (!check.rows.length) {
@@ -278,7 +265,7 @@ app.put(
           weightage,
           deadline,
           id,
-        ]
+        ],
       );
 
       res.json(result.rows[0]);
@@ -286,7 +273,7 @@ app.put(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // DELETE GOAL
@@ -300,7 +287,7 @@ app.delete(
 
       const check = await db.query(
         `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'draft'`,
-        [id, req.user.id]
+        [id, req.user.id],
       );
 
       if (!check.rows.length) {
@@ -316,7 +303,7 @@ app.delete(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // SUBMIT GOALS
@@ -328,7 +315,7 @@ app.post(
     try {
       const goals = await db.query(
         `SELECT * FROM goals WHERE employee_id = $1 AND status = 'draft'`,
-        [req.user.id]
+        [req.user.id],
       );
 
       if (!goals.rows.length) {
@@ -337,18 +324,16 @@ app.post(
 
       const totalWeight = goals.rows.reduce(
         (sum, g) => sum + parseFloat(g.weightage),
-        0
+        0,
       );
 
       if (Math.abs(totalWeight - 100) > 0.01) {
-        return res
-          .status(400)
-          .json({ error: "Total weightage must be 100%" });
+        return res.status(400).json({ error: "Total weightage must be 100%" });
       }
 
       await db.query(
         `UPDATE goals SET status = 'pending' WHERE employee_id = $1 AND status = 'draft'`,
-        [req.user.id]
+        [req.user.id],
       );
 
       res.json({ message: "Goals submitted successfully" });
@@ -356,7 +341,7 @@ app.post(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // APPROVE / REJECT
@@ -376,7 +361,7 @@ app.put(
         JOIN users u ON g.employee_id = u.id
         WHERE g.id = $1
         `,
-        [id]
+        [id],
       );
 
       if (!goalRes.rows.length) {
@@ -394,7 +379,7 @@ app.put(
 
       const updated = await db.query(
         `UPDATE goals SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
-        [newStatus, id]
+        [newStatus, id],
       );
 
       await db.query(
@@ -406,7 +391,7 @@ app.put(
           "goal",
           id,
           JSON.stringify(updated.rows[0]),
-        ]
+        ],
       );
 
       res.json(updated.rows[0]);
@@ -414,7 +399,7 @@ app.put(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // MANAGER EDIT
@@ -442,7 +427,7 @@ app.put(
         JOIN users u ON g.employee_id = u.id
         WHERE g.id = $1
         `,
-        [id]
+        [id],
       );
 
       if (!goalRes.rows.length) {
@@ -473,7 +458,7 @@ app.put(
           weightage,
           deadline,
           id,
-        ]
+        ],
       );
 
       res.json(updated.rows[0]);
@@ -481,7 +466,7 @@ app.put(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // ================= DASHBOARD =================
@@ -504,7 +489,7 @@ app.get("/api/reports/dashboard", authenticate, async (req, res) => {
         FROM goals
         WHERE employee_id = $1
         `,
-        [userId]
+        [userId],
       );
     } else if (role === "manager") {
       statsRes = await db.query(
@@ -517,7 +502,7 @@ app.get("/api/reports/dashboard", authenticate, async (req, res) => {
         JOIN users u ON g.employee_id = u.id
         WHERE u.manager_id = $1
         `,
-        [userId]
+        [userId],
       );
     } else {
       statsRes = await db.query(
@@ -527,7 +512,7 @@ app.get("/api/reports/dashboard", authenticate, async (req, res) => {
           COUNT(DISTINCT employee_id) as employees,
           COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_approval
         FROM goals
-        `
+        `,
       );
     }
 
@@ -537,7 +522,6 @@ app.get("/api/reports/dashboard", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ================= REPORTS =================
 
 app.get("/api/reports/export", authenticate, async (req, res) => {
@@ -556,7 +540,7 @@ app.get("/api/reports/export", authenticate, async (req, res) => {
         WHERE g.employee_id = $1
         ORDER BY g.created_at DESC
         `,
-        [req.user.id]
+        [req.user.id],
       );
     } else if (req.user.role === "manager") {
       result = await db.query(
@@ -570,7 +554,7 @@ app.get("/api/reports/export", authenticate, async (req, res) => {
         WHERE u.manager_id = $1
         ORDER BY g.created_at DESC
         `,
-        [req.user.id]
+        [req.user.id],
       );
     } else {
       result = await db.query(
@@ -582,7 +566,7 @@ app.get("/api/reports/export", authenticate, async (req, res) => {
         JOIN users u ON g.employee_id = u.id
         LEFT JOIN goal_progress gp ON g.id = gp.goal_id
         ORDER BY g.created_at DESC
-        `
+        `,
       );
     }
 
@@ -592,7 +576,57 @@ app.get("/api/reports/export", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// TEAM GOALS
+app.get(
+  "/api/goals/team",
+  authenticate,
+  authorize("manager", "admin"),
+  async (req, res) => {
+    try {
+      let result;
 
+      if (req.user.role === "manager") {
+        result = await db.query(
+          `
+          SELECT
+            g.*,
+            u.full_name AS employee_name,
+            gp.progress_percent,
+            gp.manager_feedback
+          FROM goals g
+          JOIN users u
+            ON g.employee_id = u.id
+          LEFT JOIN goal_progress gp
+            ON gp.goal_id = g.id
+          WHERE u.manager_id = $1
+          ORDER BY g.created_at DESC
+          `,
+          [req.user.id]
+        );
+      } else {
+        // admin sees all
+        result = await db.query(`
+          SELECT
+            g.*,
+            u.full_name AS employee_name,
+            gp.progress_percent,
+            gp.manager_feedback
+          FROM goals g
+          JOIN users u
+            ON g.employee_id = u.id
+          LEFT JOIN goal_progress gp
+            ON gp.goal_id = g.id
+          ORDER BY g.created_at DESC
+        `);
+      }
+
+      res.json(result.rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 // ================= ADMIN =================
 
 // GET ALL USERS
@@ -609,14 +643,14 @@ app.get(
         FROM users u
         LEFT JOIN users m ON u.manager_id = m.id
         ORDER BY u.role, u.full_name
-        `
+        `,
       );
       res.json(result.rows);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // CREATE USER
@@ -637,7 +671,7 @@ app.post(
         VALUES ($1,$2,$3,$4,$5,$6)
         RETURNING id, email, full_name, role
         `,
-        [email, hashed, full_name, role, department, manager_id || null]
+        [email, hashed, full_name, role, department, manager_id || null],
       );
 
       res.json(result.rows[0]);
@@ -645,7 +679,7 @@ app.post(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // DELETE USER
@@ -669,11 +703,14 @@ app.delete(
 
       await db.query(
         `DELETE FROM goal_progress WHERE goal_id IN (SELECT id FROM goals WHERE employee_id = $1)`,
-        [id]
+        [id],
       );
       await db.query(`DELETE FROM audit_log WHERE user_id = $1`, [id]);
       await db.query(`DELETE FROM goals WHERE employee_id = $1`, [id]);
-      await db.query(`UPDATE users SET manager_id = NULL WHERE manager_id = $1`, [id]);
+      await db.query(
+        `UPDATE users SET manager_id = NULL WHERE manager_id = $1`,
+        [id],
+      );
       await db.query(`DELETE FROM users WHERE id = $1`, [id]);
 
       res.json({ success: true });
@@ -681,7 +718,7 @@ app.delete(
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // AUDIT LOG
@@ -698,105 +735,53 @@ app.get(
         JOIN users u ON a.user_id = u.id
         ORDER BY a.created_at DESC
         LIMIT 200
-        `
+        `,
       );
       res.json(result.rows);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 // ================= CHECK-INS / PROGRESS =================
 
-// EMPLOYEE: Save progress
-app.post("/api/progress/:goalId", authenticate, authorize("employee"), async (req, res) => {
-  try {
-    const { goalId } = req.params;
-    const { quarter, achievement, status } = req.body;
-
-    // Verify goal belongs to employee and is approved
-    const goalRes = await db.query(
-      `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'approved'`,
-      [goalId, req.user.id]
-    );
-
-    if (!goalRes.rows.length) {
-      return res.status(403).json({ error: "Goal not found or not approved" });
-    }
-
-    const goal = goalRes.rows[0];
-
-    // Calculate progress percent
-    const progressPercent = goal.target_value > 0
-      ? Math.min((parseFloat(achievement) / parseFloat(goal.target_value)) * 100, 100).toFixed(2)
-      : 0;
-
-    // Upsert progress record
-    const existing = await db.query(
-      `SELECT * FROM goal_progress WHERE goal_id = $1`,
-      [goalId]
-    );
-
-    if (existing.rows.length) {
-      await db.query(
-        `UPDATE goal_progress 
-         SET progress_percent = $1, created_at = NOW()
-         WHERE goal_id = $2`,
-        [progressPercent, goalId]
-      );
-    } else {
-      await db.query(
-        `INSERT INTO goal_progress (goal_id, progress_percent)
-         VALUES ($1, $2)`,
-        [goalId, progressPercent]
-      );
-    }
-
-    // Save actual_value back to goal
-    await db.query(
-      `UPDATE goals SET updated_at = NOW() WHERE id = $1`,
-      [goalId]
-    );
-
-    res.json({ success: true, progress_percent: progressPercent });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // MANAGER: Save feedback
-app.post("/api/progress/:goalId/feedback", authenticate, authorize("manager", "admin"), async (req, res) => {
-  try {
-    const { goalId } = req.params;
-    const { feedback } = req.body;
+app.post(
+  "/api/progress/:goalId/feedback",
+  authenticate,
+  authorize("manager", "admin"),
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+      const { feedback } = req.body;
 
-    // Check progress record exists
-    const existing = await db.query(
-      `SELECT * FROM goal_progress WHERE goal_id = $1`,
-      [goalId]
-    );
-
-    if (existing.rows.length) {
-      await db.query(
-        `UPDATE goal_progress SET manager_feedback = $1 WHERE goal_id = $2`,
-        [feedback, goalId]
+      // Check progress record exists
+      const existing = await db.query(
+        `SELECT * FROM goal_progress WHERE goal_id = $1`,
+        [goalId],
       );
-    } else {
-      await db.query(
-        `INSERT INTO goal_progress (goal_id, progress_percent, manager_feedback)
+
+      if (existing.rows.length) {
+        await db.query(
+          `UPDATE goal_progress SET manager_feedback = $1 WHERE goal_id = $2`,
+          [feedback, goalId],
+        );
+      } else {
+        await db.query(
+          `INSERT INTO goal_progress (goal_id, progress_percent, manager_feedback)
          VALUES ($1, 0, $2)`,
-        [goalId, feedback]
-      );
-    }
+          [goalId, feedback],
+        );
+      }
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
 
 // GET progress for goals
 app.get("/api/progress", authenticate, async (req, res) => {
@@ -806,7 +791,7 @@ app.get("/api/progress", authenticate, async (req, res) => {
        FROM goal_progress gp
        JOIN goals g ON gp.goal_id = g.id
        WHERE g.employee_id = $1`,
-      [req.user.id]
+      [req.user.id],
     );
     res.json(result.rows);
   } catch (err) {
@@ -815,106 +800,209 @@ app.get("/api/progress", authenticate, async (req, res) => {
   }
 });
 // ADMIN: Unlock goals for an employee
-app.post("/api/admin/unlock-goals", authenticate, authorize("admin"), async (req, res) => {
-  try {
-    const { email } = req.body;
+app.post(
+  "/api/admin/unlock-goals",
+  authenticate,
+  authorize("admin"),
+  async (req, res) => {
+    try {
+      const { email } = req.body;
 
-    const userRes = await db.query(
-      `SELECT * FROM users WHERE email = $1`,
-      [email]
-    );
+      const userRes = await db.query(`SELECT * FROM users WHERE email = $1`, [
+        email,
+      ]);
 
-    if (!userRes.rows.length) {
-      return res.status(404).json({ error: "User not found" });
-    }
+      if (!userRes.rows.length) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-    const userId = userRes.rows[0].id;
+      const userId = userRes.rows[0].id;
 
-    await db.query(
-      `UPDATE goals SET status = 'draft', updated_at = NOW()
+      await db.query(
+        `UPDATE goals SET status = 'draft', updated_at = NOW()
        WHERE employee_id = $1 AND status = 'approved'`,
-      [userId]
-    );
+        [userId],
+      );
 
-    await db.query(
-      `INSERT INTO audit_log (user_id, action, entity_type, entity_id, new_value)
+      await db.query(
+        `INSERT INTO audit_log (user_id, action, entity_type, entity_id, new_value)
        VALUES ($1, $2, $3, $4, $5)`,
-      [req.user.id, "UNLOCK", "goals", userId, JSON.stringify({ unlocked_for: email })]
-    );
-
-    res.json({ success: true, message: `Goals unlocked for ${email}` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-app.post("/api/progress/:goalId", authenticate, authorize("employee"), async (req, res) => {
-  try {
-    const { goalId } = req.params;
-    const { quarter, achievement, status } = req.body;
-
-    const goalRes = await db.query(
-      `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'approved'`,
-      [goalId, req.user.id]
-    );
-
-    if (!goalRes.rows.length) {
-      return res.status(403).json({ error: "Goal not found or not approved" });
-    }
-
-    const goal = goalRes.rows[0];
-    const target = parseFloat(goal.target_value);
-    const actual = parseFloat(achievement);
-    let progressPercent = 0;
-
-    // ← UoM-based formula
-    switch (goal.uom_type) {
-      case "numeric":       // Min — higher is better
-      case "percentage":
-        progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
-        break;
-      case "timeline":      // Max — lower is better (e.g. TAT)
-        progressPercent = actual > 0 ? Math.min((target / actual) * 100, 100) : 0;
-        break;
-      case "zero":          // Zero = success
-        progressPercent = actual === 0 ? 100 : 0;
-        break;
-      default:
-        progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
-    }
-
-    progressPercent = parseFloat(progressPercent.toFixed(2));
-
-    // Save actual_value on goal
-    await db.query(
-      `UPDATE goals SET actual_value = $1, updated_at = NOW() WHERE id = $2`,
-      [actual, goalId]
-    );
-
-    // Upsert goal_progress
-    const existing = await db.query(
-      `SELECT * FROM goal_progress WHERE goal_id = $1`, [goalId]
-    );
-
-    if (existing.rows.length) {
-      await db.query(
-        `UPDATE goal_progress SET progress_percent = $1, created_at = NOW() WHERE goal_id = $2`,
-        [progressPercent, goalId]
+        [
+          req.user.id,
+          "UNLOCK",
+          "goals",
+          userId,
+          JSON.stringify({ unlocked_for: email }),
+        ],
       );
-    } else {
-      await db.query(
-        `INSERT INTO goal_progress (goal_id, progress_percent) VALUES ($1, $2)`,
-        [goalId, progressPercent]
-      );
+
+      res.json({ success: true, message: `Goals unlocked for ${email}` });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
     }
+  },
+);
+app.post(
+  "/api/progress/:goalId",
+  authenticate,
+  authorize("employee"),
+  async (req, res) => {
+    try {
+      const { goalId } = req.params;
+      const { quarter, achievement, status } = req.body;
 
-    res.json({ success: true, progress_percent: progressPercent });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+      const goalRes = await db.query(
+        `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'approved'`,
+        [goalId, req.user.id],
+      );
 
+      if (!goalRes.rows.length) {
+        return res
+          .status(403)
+          .json({ error: "Goal not found or not approved" });
+      }
+
+      const goal = goalRes.rows[0];
+      const target = parseFloat(goal.target_value);
+      const actual = parseFloat(achievement);
+      let progressPercent = 0;
+
+      // ← UoM-based formula
+      switch (goal.uom_type) {
+        case "numeric": // Min — higher is better
+        case "percentage":
+          progressPercent =
+            target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+          break;
+        case "timeline": // Max — lower is better (e.g. TAT)
+          progressPercent =
+            actual > 0 ? Math.min((target / actual) * 100, 100) : 0;
+          break;
+        case "zero": // Zero = success
+          progressPercent = actual === 0 ? 100 : 0;
+          break;
+        default:
+          progressPercent =
+            target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+      }
+
+      progressPercent = parseFloat(progressPercent.toFixed(2));
+
+      // Save actual_value on goal
+      await db.query(
+        `UPDATE goals SET actual_value = $1, updated_at = NOW() WHERE id = $2`,
+        [actual, goalId],
+      );
+
+      // Upsert goal_progress
+      const existing = await db.query(
+        `SELECT * FROM goal_progress WHERE goal_id = $1`,
+        [goalId],
+      );
+
+      if (existing.rows.length) {
+        await db.query(
+          `UPDATE goal_progress SET progress_percent = $1, created_at = NOW() WHERE goal_id = $2`,
+          [progressPercent, goalId],
+        );
+      } else {
+        await db.query(
+          `INSERT INTO goal_progress (goal_id, progress_percent) VALUES ($1, $2)`,
+          [goalId, progressPercent],
+        );
+      }
+
+      res.json({ success: true, progress_percent: progressPercent });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+// ADMIN/MANAGER: Push shared goal to multiple employees
+app.post(
+  "/api/goals/shared",
+  authenticate,
+  authorize("admin", "manager"),
+  async (req, res) => {
+    try {
+      const {
+        title,
+        description,
+        thrust_area,
+        uom_type,
+        target_value,
+        deadline,
+        employee_ids,
+      } = req.body;
+
+      if (!employee_ids?.length) {
+        return res.status(400).json({ error: "Select at least one employee" });
+      }
+
+      const results = [];
+      for (const empId of employee_ids) {
+        const result = await db.query(
+          `INSERT INTO goals
+          (employee_id, title, description, thrust_area, uom_type, target_value, weightage, deadline, status, is_shared)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'approved',true)
+         RETURNING *`,
+          [
+            empId,
+            title,
+            description,
+            thrust_area,
+            uom_type,
+            target_value,
+            10,
+            deadline,
+          ],
+        );
+        results.push(result.rows[0]);
+      }
+
+      res.json({ success: true, created: results.length });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+// Employee: Update weightage only on shared goal
+app.patch(
+  "/api/goals/:id/weightage",
+  authenticate,
+  authorize("employee"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { weightage } = req.body;
+
+      const check = await db.query(
+        `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND is_shared = true`,
+        [id, req.user.id],
+      );
+
+      if (!check.rows.length) {
+        return res
+          .status(403)
+          .json({ error: "Not a shared goal or access denied" });
+      }
+
+      const result = await db.query(
+        `UPDATE goals SET weightage = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [weightage, id],
+      );
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
 // ================= ERROR HANDLER =================
 
 app.use((err, req, res, next) => {

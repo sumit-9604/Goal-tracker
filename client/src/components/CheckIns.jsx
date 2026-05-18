@@ -149,7 +149,7 @@ const CheckIns = () => {
               )}
 
               {/* Manager feedback display */}
-              {goal.manager_feedback && (
+              {goal.manager_feedback ?.trim() && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-3 text-sm">
                   <p className="font-semibold text-yellow-800">Manager Feedback:</p>
                   <p className="text-yellow-700">{goal.manager_feedback}</p>
