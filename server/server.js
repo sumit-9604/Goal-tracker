@@ -814,6 +814,107 @@ app.get("/api/progress", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// ADMIN: Unlock goals for an employee
+app.post("/api/admin/unlock-goals", authenticate, authorize("admin"), async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const userRes = await db.query(
+      `SELECT * FROM users WHERE email = $1`,
+      [email]
+    );
+
+    if (!userRes.rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userId = userRes.rows[0].id;
+
+    await db.query(
+      `UPDATE goals SET status = 'draft', updated_at = NOW()
+       WHERE employee_id = $1 AND status = 'approved'`,
+      [userId]
+    );
+
+    await db.query(
+      `INSERT INTO audit_log (user_id, action, entity_type, entity_id, new_value)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [req.user.id, "UNLOCK", "goals", userId, JSON.stringify({ unlocked_for: email })]
+    );
+
+    res.json({ success: true, message: `Goals unlocked for ${email}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post("/api/progress/:goalId", authenticate, authorize("employee"), async (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { quarter, achievement, status } = req.body;
+
+    const goalRes = await db.query(
+      `SELECT * FROM goals WHERE id = $1 AND employee_id = $2 AND status = 'approved'`,
+      [goalId, req.user.id]
+    );
+
+    if (!goalRes.rows.length) {
+      return res.status(403).json({ error: "Goal not found or not approved" });
+    }
+
+    const goal = goalRes.rows[0];
+    const target = parseFloat(goal.target_value);
+    const actual = parseFloat(achievement);
+    let progressPercent = 0;
+
+    // ← UoM-based formula
+    switch (goal.uom_type) {
+      case "numeric":       // Min — higher is better
+      case "percentage":
+        progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+        break;
+      case "timeline":      // Max — lower is better (e.g. TAT)
+        progressPercent = actual > 0 ? Math.min((target / actual) * 100, 100) : 0;
+        break;
+      case "zero":          // Zero = success
+        progressPercent = actual === 0 ? 100 : 0;
+        break;
+      default:
+        progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
+    }
+
+    progressPercent = parseFloat(progressPercent.toFixed(2));
+
+    // Save actual_value on goal
+    await db.query(
+      `UPDATE goals SET actual_value = $1, updated_at = NOW() WHERE id = $2`,
+      [actual, goalId]
+    );
+
+    // Upsert goal_progress
+    const existing = await db.query(
+      `SELECT * FROM goal_progress WHERE goal_id = $1`, [goalId]
+    );
+
+    if (existing.rows.length) {
+      await db.query(
+        `UPDATE goal_progress SET progress_percent = $1, created_at = NOW() WHERE goal_id = $2`,
+        [progressPercent, goalId]
+      );
+    } else {
+      await db.query(
+        `INSERT INTO goal_progress (goal_id, progress_percent) VALUES ($1, $2)`,
+        [goalId, progressPercent]
+      );
+    }
+
+    res.json({ success: true, progress_percent: progressPercent });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ================= ERROR HANDLER =================
 
 app.use((err, req, res, next) => {
