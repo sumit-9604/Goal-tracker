@@ -754,26 +754,30 @@ app.post(
   async (req, res) => {
     try {
       const { goalId } = req.params;
-      const { feedback } = req.body;
+      const { feedback,quarter } = req.body;
 
       // Check progress record exists
       const existing = await db.query(
-        `SELECT * FROM goal_progress WHERE goal_id = $1`,
-        [goalId],
-      );
+  `SELECT * FROM goal_progress
+   WHERE goal_id = $1 AND quarter = $2`,
+  [goalId, quarter]
+);
 
-      if (existing.rows.length) {
-        await db.query(
-          `UPDATE goal_progress SET manager_feedback = $1 WHERE goal_id = $2`,
-          [feedback, goalId],
-        );
-      } else {
-        await db.query(
-          `INSERT INTO goal_progress (goal_id, progress_percent, manager_feedback)
-         VALUES ($1, 0, $2)`,
-          [goalId, feedback],
-        );
-      }
+if (existing.rows.length) {
+  await db.query(
+    `UPDATE goal_progress
+     SET manager_feedback = $1
+     WHERE goal_id = $2 AND quarter = $3`,
+    [feedback, goalId, quarter]
+  );
+} else {
+  await db.query(
+    `INSERT INTO goal_progress
+     (goal_id, quarter, manager_feedback)
+     VALUES ($1,$2,$3)`,
+    [goalId, quarter, feedback]
+  );
+}
 
       res.json({ success: true });
     } catch (err) {
@@ -897,22 +901,17 @@ app.post(
 
       // Upsert goal_progress
       const existing = await db.query(
-        `SELECT * FROM goal_progress WHERE goal_id = $1`,
-        [goalId],
-      );
-
-      if (existing.rows.length) {
-        await db.query(
-          `UPDATE goal_progress SET progress_percent = $1, created_at = NOW() WHERE goal_id = $2`,
-          [progressPercent, goalId],
-        );
-      } else {
-        await db.query(
-          `INSERT INTO goal_progress (goal_id, progress_percent) VALUES ($1, $2)`,
-          [goalId, progressPercent],
-        );
-      }
-
+  `INSERT INTO goal_progress
+   (goal_id, quarter, achievement, status, progress_percent)
+   VALUES ($1,$2,$3,$4,$5)`,
+  [
+    goalId,
+    quarter,
+    actual,
+    status,
+    progressPercent,
+  ]
+);
       res.json({ success: true, progress_percent: progressPercent });
     } catch (err) {
       console.error(err);
