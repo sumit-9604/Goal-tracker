@@ -7,21 +7,35 @@ import { AuthContext } from "../App";
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");        // ← add this
+  const [loading, setLoading] = useState(false); // ← add this
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");        // ← clear previous error
+    setLoading(true);   // ← show loading state
     try {
-      console.log("Attempting login to:", api.defaults.baseURL);
       const res = await api.post("/auth/login", { email, password });
-      console.log("Login response:", res.data);
       login(res.data.user, res.data.token);
       toast.success("Login successful");
       navigate("/dashboard");
     } catch (err) {
-      console.error("Login error:", err);
-      toast.error(err.response?.data?.error || "Login failed");
+      const message = err.response?.data?.error || "Login failed";
+      
+      // ← show specific messages
+      if (err.response?.status === 401) {
+        setError("Invalid email or password. Please try again.");
+      } else if (err.response?.status === 500) {
+        setError("Server error. Please try again later.");
+      } else if (!err.response) {
+        setError("Network error. Check your connection.");
+      } else {
+        setError(message);
+      }
+    } finally {
+      setLoading(false); // ← always stop loading
     }
   };
 
@@ -37,7 +51,16 @@ const Login = () => {
           </h1>
           <p className="text-gray-500 mt-2">Sign in to your account</p>
         </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* ← Error message box */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
+              {error}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Email
@@ -45,12 +68,13 @@ const Login = () => {
             <input
               type="email"
               placeholder="you@example.com"
-              className="input"
+              className={`input ${error ? "border-red-300 focus:ring-red-400" : ""}`}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
               required
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Password
@@ -58,16 +82,24 @@ const Login = () => {
             <input
               type="password"
               placeholder="••••••••"
-              className="input"
+              className={`input ${error ? "border-red-300 focus:ring-red-400" : ""}`}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
               required
             />
           </div>
-          <button type="submit" className="btn-primary w-full py-2.5">
-            Sign In
+
+          {/* ← Loading state on button */}
+          <button
+            type="submit"
+            className="btn-primary w-full py-2.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={loading}
+          >
+            {loading ? "Signing in..." : "Sign In"}
           </button>
+
         </form>
+
         <p className="text-xs text-gray-400 text-center mt-6">
           Demo: employee@example.com / password123
         </p>
