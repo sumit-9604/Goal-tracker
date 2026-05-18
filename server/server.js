@@ -888,7 +888,7 @@ app.post(
         SELECT * FROM goals
         WHERE id = $1
         AND employee_id = $2
-        AND status = 'approved'
+        AND status IN ('approved', 'locked')
         `,
         [goalId, req.user.id]
       );
@@ -900,7 +900,6 @@ app.post(
       }
 
       const goal = goalRes.rows[0];
-
       const target = parseFloat(goal.target_value);
       const actual = parseFloat(achievement);
 
@@ -909,63 +908,43 @@ app.post(
       switch (goal.uom_type) {
         case "numeric":
         case "percentage":
-          progressPercent =
-            target > 0
-              ? Math.min((actual / target) * 100, 100)
-              : 0;
+          progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
           break;
-
         case "timeline":
-          progressPercent =
-            actual > 0
-              ? Math.min((target / actual) * 100, 100)
-              : 0;
+          progressPercent = actual > 0 ? Math.min((target / actual) * 100, 100) : 0;
           break;
-
         case "zero":
           progressPercent = actual === 0 ? 100 : 0;
           break;
-
         default:
-          progressPercent =
-            target > 0
-              ? Math.min((actual / target) * 100, 100)
-              : 0;
+          progressPercent = target > 0 ? Math.min((actual / target) * 100, 100) : 0;
       }
 
       progressPercent = parseFloat(progressPercent.toFixed(2));
 
+      // Update actual_value in goals table
       await db.query(
         `
         UPDATE goals
-        SET actual_value = $1,
-            updated_at = NOW()
+        SET actual_value = $1, updated_at = NOW()
         WHERE id = $2
         `,
         [actual, goalId]
       );
 
+      // UPSERT using created_by (no updated_at)
       await db.query(
         `
-        INSERT INTO goal_progress
-        (
-          goal_id,
-          quarter,
-          achievement,
-          status,
-          progress_percent,
-          created_by
-        )
-        VALUES ($1,$2,$3,$4,$5,$6)
+        INSERT INTO goal_progress (goal_id, quarter, achievement, status, progress_percent, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (goal_id, quarter) 
+        DO UPDATE SET 
+          achievement = EXCLUDED.achievement,
+          status = EXCLUDED.status,
+          progress_percent = EXCLUDED.progress_percent,
+          created_by = EXCLUDED.created_by
         `,
-        [
-          goalId,
-          quarter,
-          actual,
-          status,
-          progressPercent,
-          req.user.id,
-        ]
+        [goalId, quarter, actual, status, progressPercent, req.user.id]
       );
 
       res.json({
